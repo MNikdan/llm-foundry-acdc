@@ -51,7 +51,9 @@ def main(
         'optimizer.lr': lr,
         'data_local': dpath,
         'run_name': run_name,
-        'hf_save_path': './checkpoints/'
+        'hf_save_path': './checkpoints/',
+        'device_train_microbatch_size': 2,
+        'device_eval_microbatch_size': 2
     }
 
     print(run_name)

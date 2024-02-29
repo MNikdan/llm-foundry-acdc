@@ -118,7 +118,7 @@ class ACDC(Algorithm):
             current_step = item['end']
             
         
-        print(f'[ACDC] Schedule: {clean_schedule}')
+        # print(f'[ACDC] Schedule: {clean_schedule}')
         return clean_schedule
 
     def _get_current_agenda(self):
