@@ -748,6 +748,10 @@ def main(cfg: DictConfig):
                                             'save_folder',
                                             must_exist=False,
                                             default_value=None)
+    hf_save_path: Optional[str] = pop_config(cfg,
+                                            'hf_save_path',
+                                            must_exist=False,
+                                            default_value="/mnt/beegfs/alistgrp/mnikdan/llmfoundry-acdc-ckpts/")
     save_latest_filename: str = pop_config(cfg,
                                            'save_latest_filename',
                                            must_exist=False,
@@ -1002,9 +1006,9 @@ def main(cfg: DictConfig):
 
     print('Saving directly into HF-friendly format')
     if "WANDB_PROJECT" in os.environ and os.environ["WANDB_DISABLED"] == "False":
-        path_to_save = os.path.join("/mnt/beegfs/alistgrp/mnikdan/llmfoundry-acdc-ckpts/", os.environ["WANDB_PROJECT"], run_name)
+        path_to_save = os.path.join(hf_save_path, os.environ["WANDB_PROJECT"], run_name)
     else:
-        path_to_save = os.path.join("/mnt/beegfs/alistgrp/mnikdan/llmfoundry-acdc-ckpts/", run_name)
+        path_to_save = os.path.join(hf_save_path, run_name)
 
     if torch.distributed.get_rank() == 0:
         os.makedirs(path_to_save, exist_ok=True) # <-- override if it exists
