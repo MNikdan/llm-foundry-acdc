@@ -21,7 +21,7 @@ device: gpu
 dist_timeout: 72000
 
 # Run Name
-run_name: bert_base_uncased_acdcpp_vnm_64-2-8_64-2-16_w8kf8kc9k
+run_name: bert_base_uncased_acdcpp_vnm_64-2-4_64-2-8_w8kf8kc9k
 
 # Tokenizer
 tokenizer:
@@ -103,14 +103,14 @@ acdc:
       end: 16000
       reset_optimizer: true # whether to reset optimizer before this period starts
     - type: dense
-      end: 32000
+      end: 24000
       reset_optimizer: true
     - type: high/low
       freq: 8000
       end: 72000
       reset_optimizer: true # whether to reset optimizer before every period in this item starts
     - type: high
-      reset_optimizer: false
+      reset_optimizer: true
 
   # warmup: 8000
   # acdc_freq: 8000

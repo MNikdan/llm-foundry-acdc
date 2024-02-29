@@ -13,6 +13,8 @@ from composer.utils import dist, get_device, reproducibility
 from omegaconf import DictConfig, ListConfig
 from omegaconf import OmegaConf as om
 from transformers import PreTrainedTokenizerBase
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
+
 
 from llmfoundry import (COMPOSER_MODEL_REGISTRY, ComposerHFCausalLM,
                         MPTForCausalLM, build_finetuning_dataloader,
@@ -37,17 +39,14 @@ import wandb
 
 class ACDC(Algorithm):
     @torch.no_grad()
-    def __init__(self, model, params_re: str, sparsity_high: Union[float, str], sparsity_low: Union[float, str], sparsity_structure: str, is_global: bool, schedule: List[dict], pruner: str, total_num_steps: int):        
-        self.sparsity_high = sparsity_high
-        self.sparsity_low = sparsity_low
+    def __init__(self, model, params_re: str, sparsity_structure: str, is_global: bool, schedule: List[dict], pruner: str):        
         self.sparsity_structure = sparsity_structure
         self.is_global = is_global
         self.pruner = pruner
         self.first_time_here = True
 
-        self.total_num_steps = total_num_steps  # 89079 for 1 epoch
         self.step = 0
-        self.schedule = self._process_schedule(schedule, self.total_num_steps)
+        self.schedule = self._process_schedule(schedule)
         self.current_sparsity = None # None means dense
 
         # self.sparse_schedule = [False] * self.warmup
@@ -68,49 +67,56 @@ class ACDC(Algorithm):
 
         print(f'[ACDC] Pruning {self.prune_params_names} parameters')
 
-    def _schedule_name_to_sparsity(self, name):
-        assert name in ['dense', 'low', 'high'], f'Unknown schedule name {name}'
-        if name == 'low':
-            return self.sparsity_low
-        elif name == 'high':
-            return self.sparsity_high
-        else:
-            return None
-
-    def _process_schedule(self, schedule, total_steps):
+    def _process_schedule(self, schedule):
         clean_schedule = []
         current_step = 0
         for i, item in enumerate(schedule):
             if 'end' not in item:
                 assert i == len(schedule) - 1, 'Only the last item in the schedule can have no end'
-                item['end'] = total_steps
+                item['end'] = int(1e9)
             
             assert current_step < item['end'], 'Schedule items must be in increasing order'
-            assert item['end'] <= total_steps, 'Schedule items must end before total number of steps'
 
-            if '/' not in item['type']: # it's either dense, low, high
-                assert item['type'] in ['dense', 'low', 'high'], f'Unknown type {item["type"]}'
+            sp_parts = str(item['sparsity']).split('/')
+            if len(sp_parts) == 1: # it's just a single number
+                sparsity = float(sp_parts[0])
                 clean_schedule.append({
-                    'sparsity': self._schedule_name_to_sparsity(item['type']),
+                    'sparsity': sparsity,
                     'end': item['end'],
                     'reset_optimizer': item.get('reset_optimizer', False),
                 })
-            else:
-                assert 'freq' in item, f'Frequency not specified for type {item["type"]}'
+            elif len(sp_parts) == 2: # it's an alternation
+                assert 'freq' in item, f'Frequency not specified for {item["sparsity"]}'
 
-                parts = item['type'].split('/')
-                assert len(parts) == 2, f'Unknown type {item["type"]}'
-                assert all([p in ['dense', 'low', 'high'] for p in parts]), f'Unknown type {item["type"]}'
-                
+                sparsities = [float(sp) for sp in sp_parts]
+
                 assert (item['end'] - current_step) % item['freq'] == 0, f'Frequency {item["freq"]} does not divide the number of steps {item["end"] - current_step}'
                 for i in range((item['end'] - current_step) // item['freq']):
                     clean_schedule.append({
-                        'sparsity': self._schedule_name_to_sparsity(parts[i % 2]),
+                        'sparsity': sparsities[i % 2],
+                        'end': current_step + (i + 1) * item['freq'],
+                        'reset_optimizer': item.get('reset_optimizer', False)
+                    })
+            else: # it's gradual acdc
+                assert len(sp_parts) == 3, f'Invalid sparsity {item["sparsity"]}'
+                typ = sp_parts[0]
+                assert typ in ['linear'], f'Unknown gradual type {typ}'
+
+                low, high = float(sp_parts[1]), float(sp_parts[2])
+                assert low < high, f'Invalid sparsity {item["sparsity"]}'
+
+                assert (item['end'] - current_step) % item['freq'] == 0, f'Frequency {item["freq"]} does not divide the number of steps {item["end"] - current_step}'
+                num_phases = (item['end'] - current_step) // item['freq']
+                for i in range(num_phases):
+                    sparsity = low if i % 2 == 0 else ((high - low) * (i + 1) / num_phases + low)
+                    clean_schedule.append({
+                        'sparsity': sparsity,
                         'end': current_step + (i + 1) * item['freq'],
                         'reset_optimizer': item.get('reset_optimizer', False)
                     })
 
             current_step = item['end']
+            
         
         print(f'[ACDC] Schedule: {clean_schedule}')
         return clean_schedule
@@ -167,7 +173,6 @@ class ACDC(Algorithm):
     @torch.no_grad()
     def prune_magnitude_unstr(self, sparsity):
         assert self.pruner == 'magnitude'
-        assert self.sparsity_structure == 'unstructured', 'structure should be "unstructured"'
         assert isinstance(sparsity, float) and 0 < sparsity < 1, f'Invalid sparsity {sparsity}'
 
         scores = [torch.abs(param.data).reshape(-1) for param in self.prune_params]
@@ -208,11 +213,10 @@ class ACDC(Algorithm):
                 mask.data = torch.logical_or(mask.data, eq_mask)
             
             print(f'[ACDC] A mask was generated with sparsity {1 - mask.sum().item() / mask.numel()}.')
-
+    
     @torch.no_grad()
     def prune_magnitude_vnm(self, v, n, m, shuffle_cols=True):
         assert self.pruner == 'magnitude'
-        assert self.sparsity_structure == 'vnm', 'structure should be vnm'
         assert not self.is_global, 'global pruning not supported for vnm'
         assert n == 2, 'only n=2 is supported for vnm'
 
@@ -256,6 +260,122 @@ class ACDC(Algorithm):
 
             print(f'[ACDC] A venom mask was generated with sparsity {1 - mask.sum().item() / mask.numel()}.')
 
+    @torch.no_grad()
+    def prune_magnitude_str(self, sparsity, do_log=True):
+        assert self.pruner == 'magnitude'
+        assert isinstance(sparsity, float) and 0 < sparsity < 1, f'Invalid sparsity {sparsity}'
+        
+        row_scores = [torch.abs(param.data).sum(-1) for param in self.prune_params]
+
+        if self.is_global:
+            row_scores = [torch.cat(row_scores)]
+
+        thresholds = []
+        pick_thresh_probs = [] # useful when there are ties, especially when threshold is 0
+        for row_score in row_scores:
+            num_zeros = int(row_score.numel() * sparsity)
+            threshold = torch.kthvalue(row_score, num_zeros)[0]
+            thresholds.append(threshold)
+            num_eq_thresh = (row_score == threshold).sum().item()
+            num_le_thresh = (row_score <= threshold).sum().item()
+            if num_zeros < num_le_thresh and num_eq_thresh >= num_le_thresh - num_zeros:
+                pick_thresh_probs.append((num_le_thresh - num_zeros) / num_eq_thresh)
+            else:
+                pick_thresh_probs.append(0.)
+
+        if self.is_global:
+            thresholds = thresholds * len(self.prune_params)
+            pick_thresh_probs = pick_thresh_probs * len(self.prune_params)
+
+        # if sparsity > 0 and sparsity < 0.7:
+        #     if self.gpu == 0:
+        #         breakpoint()
+        #     torch.distributed.barrier()
+
+        for param, mask, threshold, ptp in zip(self.prune_params, self.masks, thresholds, pick_thresh_probs, strict=True):
+            row_abs_sums = torch.abs(param.data).sum(-1)
+            row_mask = torch.where(row_abs_sums > threshold, torch.ones_like(row_abs_sums, dtype=mask.dtype), torch.zeros_like(row_abs_sums, dtype=mask.dtype))
+
+            if ptp > 0:
+                eq_mask = torch.where(
+                    torch.logical_and(row_abs_sums == threshold, torch.bernoulli(torch.ones_like(row_mask) * ptp)),
+                    torch.ones_like(row_mask),
+                    torch.zeros_like(row_mask),
+                )
+                row_mask = torch.logical_or(row_mask, eq_mask)
+            
+            mask.data = row_mask.unsqueeze(-1).repeat(1, mask.data.shape[-1])
+
+            if do_log:
+                print(f'[ACDC] A mask was generated with sparsity {1 - mask.sum().item() / mask.numel()}.')
+
+    @torch.no_grad()
+    def prune_magnitude_cas(self, sparsity, col_transfer_ratio=0.9):
+        # first let's prune the rows
+        self.prune_magnitude_str(sparsity, do_log=False)
+
+        mapping = {
+            'self_attn.q_proj': [('prev', 'mlp.down_proj')],
+            'self_attn.k_proj': [('prev', 'mlp.down_proj')],
+            'self_attn.v_proj': [('prev', 'mlp.down_proj')],
+            'mlp.up_proj': [('current', 'self_attn.o_proj')],
+            'mlp.gate_proj': [('current', 'self_attn.o_proj')],
+            'mlp.down_proj': [('current', 'mlp.up_proj'), ('current', 'mlp.gate_proj')]
+        }
+
+        # let's find the mask of the non-pruned rows first
+        pruned_row_masks = {}
+        for name, mask in zip(self.prune_params_names, self.masks, strict=True):
+            pruned_row_masks[name] = mask.data.sum(-1) != 0
+
+        # now let's prune the columns
+        for name, mask, param in zip(self.prune_params_names, self.masks, self.prune_params, strict=True):
+            if '.weight' not in name:
+                continue
+            
+            for key, value in mapping.items():
+                if key in name:
+                    layer = int(name.split('layers.')[-1].split('.self_attn')[0].split('.mlp')[0])
+                    col_mask_and = mask.new_ones(mask.shape[-1])
+                    for src_layer, src_key in value:
+                        src_name = name.replace(key, src_key)
+                        if src_layer == 'prev':
+                            if layer == 0: # no prev
+                                continue
+                            src_name = src_name.replace(f'.{layer}.', f'.{layer - 1}.')
+                        col_mask_and = torch.logical_and(col_mask_and, pruned_row_masks[src_name])
+
+                    if torch.all(col_mask_and):
+                        continue
+                    
+                    col_scores = torch.abs(param.data).sum(0)[torch.logical_not(col_mask_and)]
+                    num_zeros = int(col_scores.numel() * col_transfer_ratio)
+                    threshold = torch.kthvalue(col_scores, num_zeros)[0]
+
+                    ptp = 0 # to supprot acdc++, where we decrease sprasity to somewhere more than 0
+                    num_eq_thresh = (col_scores == threshold).sum().item()
+                    num_le_thresh = (col_scores <= threshold).sum().item()
+                    if num_zeros < num_le_thresh and num_eq_thresh >= num_le_thresh - num_zeros:
+                        ptp = (num_le_thresh - num_zeros) / num_eq_thresh
+
+                    col_sub_mask = torch.where(col_scores > threshold, torch.ones_like(col_scores, dtype=mask.dtype), torch.zeros_like(col_scores, dtype=mask.dtype))
+
+                    if ptp > 0:
+                        eq_mask = torch.where(
+                            torch.logical_and(col_scores == threshold, torch.bernoulli(torch.ones_like(col_sub_mask) * ptp)),
+                            torch.ones_like(col_sub_mask),
+                            torch.zeros_like(col_sub_mask),
+                        )
+                        col_sub_mask = torch.logical_or(col_sub_mask, eq_mask)
+
+                    mask.data[:, torch.logical_not(col_mask_and)] *= col_sub_mask.unsqueeze(0).repeat(mask.shape[0], 1)
+
+        # print(f'[ACDC CAS] {name}')
+        # print(f'unstr={1 - mask.sum().item() / mask.numel():.3f}, row={(mask.sum(-1) == 0).float().mean():.3f}, col={(mask.sum(0) == 0).float().mean():.3f}')
+        # print('-' * 80)
+                
+
+
     # @torch.no_grad()
     # def prune_fisher_blocksize1(self, optimizers):
     #     optim = optimizers[0]
@@ -279,14 +399,28 @@ class ACDC(Algorithm):
         to_log = {}
         num_zeros_params = 0
         num_zeros_masks = 0
+        num_all_zero_rows = 0
+        num_all_zero_cols = 0
+        num_all_rows = 0
+        num_all_cols = 0
         for name, mask, param in zip(self.prune_params_names, self.masks, self.prune_params):
             num_pruned = (mask.data == 0).sum().item()
+            num_pruned_rows = (mask.sum(-1) == 0).sum().item()
+            num_pruned_cols = (mask.sum(0) == 0).sum().item()
             to_log['acdc_perparam/' + name] = num_pruned / mask.numel()
+            to_log['acdc_perparam_row/' + name] = num_pruned_rows / mask.shape[0]
+            to_log['acdc_perparam_col/' + name] = num_pruned_cols / mask.shape[1]
             num_zeros_masks += num_pruned
             num_zeros_params += (param.data == 0).sum().item()
+            num_all_zero_rows += num_pruned_rows
+            num_all_zero_cols += num_pruned_cols
+            num_all_rows += mask.shape[0]
+            num_all_cols += mask.shape[1]
 
         to_log['acdc/prunable_sparsity_masks'] = num_zeros_masks / self.num_prunable
         to_log['acdc/prunable_sparsity_params'] = num_zeros_params / self.num_prunable
+        to_log['acdc/prunable_row_sparsity'] = num_all_zero_rows / num_all_rows
+        to_log['acdc/prunable_col_sparsity'] = num_all_zero_cols / num_all_cols
         to_log['acdc/num_params'] = self.num_params
         to_log['acdc/num_prunable'] = self.num_prunable
         return to_log
@@ -298,18 +432,22 @@ class ACDC(Algorithm):
 
     @torch.no_grad()
     def prune(self, sparsity):
-        if sparsity is None:
+        if sparsity is None or sparsity <= 0:
             for mask in self.masks:
                 mask.fill_(1.)
             print('masks were reset to all ones')
             return
 
         if self.pruner == 'magnitude':
-            if self.sparsity_structure == 'unstructured':
+            if self.sparsity_structure == 'unstr':
                 self.prune_magnitude_unstr(sparsity)
+            elif self.sparsity_structure == 'str':
+                self.prune_magnitude_str(sparsity)
             elif self.sparsity_structure == 'vnm':
                 v, n, m = sparsity.split(':')
                 self.prune_magnitude_vnm(int(v), int(n), int(m))
+            elif self.sparsity_structure == 'cas':
+                self.prune_magnitude_cas(sparsity)
         else:
             raise NotImplementedError(f"Pruner {self.pruner} not implemented")    
         
@@ -658,6 +796,10 @@ def main(cfg: DictConfig):
                                               'eval_subset_num_batches',
                                               must_exist=False,
                                               default_value=-1)
+    train_subset_num_batches: int = pop_config(cfg,
+                                              'train_subset_num_batches',
+                                              must_exist=False,
+                                              default_value=-1)
     eval_first: bool = pop_config(cfg,
                                   'eval_first',
                                   must_exist=False,
@@ -798,7 +940,6 @@ def main(cfg: DictConfig):
             ACDC(
                 model=model,
                 **acdc_config,
-                total_num_steps=num_steps,
             )
         )
     except Exception as e:
@@ -820,6 +961,7 @@ def main(cfg: DictConfig):
         max_duration=max_duration,
         eval_interval=eval_interval,
         eval_subset_num_batches=eval_subset_num_batches,
+        train_subset_num_batches=train_subset_num_batches,
         progress_bar=progress_bar,
         log_to_console=log_to_console,
         console_log_interval=console_log_interval,
@@ -857,6 +999,33 @@ def main(cfg: DictConfig):
 
     print('Done.')
 
+
+    print('Saving directly into HF-friendly format')
+    if "WANDB_PROJECT" in os.environ and os.environ["WANDB_DISABLED"] == "False":
+        path_to_save = os.path.join("/mnt/beegfs/alistgrp/mnikdan/llmfoundry-acdc-ckpts/", os.environ["WANDB_PROJECT"], run_name)
+    else:
+        path_to_save = os.path.join("/mnt/beegfs/alistgrp/mnikdan/llmfoundry-acdc-ckpts/", run_name)
+
+    if torch.distributed.get_rank() == 0:
+        os.makedirs(path_to_save, exist_ok=True) # <-- override if it exists
+        
+    # Save the model in sharded format
+    if fsdp_config is not None:
+        with FSDP.summon_full_params(model.model, writeback=False, rank0_only=True, offload_to_cpu=True):
+            model.model.save_pretrained(path_to_save, is_main_process=torch.distributed.get_rank() == 0, state_dict=model.model.state_dict())
+    else:
+        model.model.save_pretrained(path_to_save, is_main_process=torch.distributed.get_rank() == 0, state_dict=model.model.state_dict())
+    
+    if torch.distributed.get_rank() == 0:
+        tokenizer.save_pretrained(path_to_save)
+    # NOTE: for some reason the saving code above would create empty pytorch_model.bin file, so we delete it manually
+    # TODO: figure out why this happens
+    if torch.distributed.get_rank() == 0 and os.path.exists(os.path.join(path_to_save, "pytorch_model.bin")):
+        tmp = torch.load(os.path.join(path_to_save, "pytorch_model.bin"))
+        if not tmp:  # empty dict, remove it
+            os.remove(os.path.join(path_to_save, "pytorch_model.bin"))
+
+    print('Done.')
 
 if __name__ == '__main__':
     yaml_path, args_list = sys.argv[1], sys.argv[2:]

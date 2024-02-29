@@ -90,7 +90,9 @@ def build_algorithm(name: str, kwargs: Dict[str, Any]):
 
 def build_optimizer(model: torch.nn.Module, name: str,
                     optimizer_config: Dict[str, Any]):
-    if name == 'decoupled_adamw':
+    if name == 'adam':
+        return torch.optim.Adam(model.parameters(), **optimizer_config)
+    elif name == 'decoupled_adamw':
         return DecoupledAdamW(model.parameters(), **optimizer_config)
     elif name == 'decoupled_lionw':
         return DecoupledLionW(model.parameters(), **optimizer_config)

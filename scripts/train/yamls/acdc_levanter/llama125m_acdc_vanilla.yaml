@@ -1,0 +1,138 @@
+data_local: /mnt/beegfs/alistgrp/mnikdan/c4
+data_remote: # If blank, files must be present in data_local
+model_name_or_path: /mnt/beegfs/alistgrp/mnikdan/llama2-125m-reset
+
+max_seq_len: 4096
+tokenizer_name: meta-llama/Llama-2-70b-hf
+
+# System
+seed: 0
+device_eval_batch_size: 4
+device_train_microbatch_size: 4
+precision: amp_bf16
+device: gpu
+dist_timeout: 72000
+max_duration: #TODO
+
+run_name: #TODO
+# Run Name
+
+# not using all the data for every batch
+eval_subset_num_batches: #TODO
+train_subset_num_batches: #TODO
+eval_interval: #TODO
+global_train_batch_size: #TODO
+
+acdc_schedule_0_end: #TODO
+acdc_schedule_1_freq: #TODO
+acdc_schedule_1_end: #TODO
+acdc_schedule_2_end: #TODO
+acdc_final_sparsity: #TODO
+
+acdc:
+  params_re: .*.(q_proj|k_proj|v_proj|o_proj|up_proj|down_proj|gate_proj).weight
+  # params_re: .*.(q_proj|k_proj|v_proj|o_proj).weight
+  is_global: #TODO
+  pruner: #TODO
+  sparsity_structure: #TODO
+  schedule:
+    - sparsity: 0
+      end: ${acdc_schedule_0_end}
+    - sparsity: 0/${acdc_final_sparsity}
+      freq: ${acdc_schedule_1_freq}
+      end: ${acdc_schedule_1_end}
+      reset_optimizer: false # whether to reset optimizer before every period in this item starts
+    - sparsity: 0
+      end: ${acdc_schedule_2_end}
+      reset_optimizer: false
+    - sparsity: ${acdc_final_sparsity}
+      reset_optimizer: false
+
+# Tokenizer
+tokenizer:
+  name: ${tokenizer_name}
+  kwargs:
+    model_max_length: ${max_seq_len}
+
+# Model
+model:
+  name: hf_causal_lm
+  pretrained_model_name_or_path: ${model_name_or_path}
+  pretrained: false
+  max_seq_len: ${max_seq_len}
+  output_hidden_states: true
+  tokenizer_name: ${tokenizer_name}
+
+# Dataloaders
+train_loader:
+  name: text
+  dataset:
+    local: ${data_local}
+    remote: ${data_remote}
+    split: train
+    # tokenizer_name: ${tokenizer_name}
+    max_seq_len: ${max_seq_len}
+    shuffle: true
+    # mlm_probability: ${mlm_probability}
+  drop_last: true
+  num_workers: 8
+
+eval_loader:
+  name: text
+  dataset:
+    local: ${data_local}
+    remote: ${data_remote}
+    split: val
+    # tokenizer_name: ${tokenizer_name}
+    max_seq_len: ${max_seq_len}
+    shuffle: false
+    # mlm_probability: 0.15 # We always evaluate at 15% masking for consistent comparison
+  drop_last: false
+  num_workers: 8
+
+# Optimization
+scheduler:
+  name: cosine_with_warmup
+  t_warmup: 0.01dur
+  alpha_f: 0.1 # Linearly decay to 0.1x the full LR by the end of the training duration
+
+optimizer:
+  name: #TODO adam
+  lr: #TODO 3.0e-3
+  betas:
+  - 0.9
+  - 0.999
+  eps: 1.0e-08
+  weight_decay: #TODO
+
+algorithms:
+  gradient_clipping:
+    clipping_type: norm
+    clipping_threshold: 1.0
+
+# Logging
+progress_bar: true
+log_to_console: true
+console_log_interval: 1ba
+
+callbacks:
+  speed_monitor:
+    window_size: 500
+  lr_monitor: {}
+
+# (Optional) W&B logging
+loggers:
+  wandb:
+    project: acdc-llmfoundry
+    entity: mnikdan
+
+# # (Optional) Checkpoint to local filesystem or remote object store
+# save_interval: 10000ba
+# save_num_checkpoints_to_keep: 1  # Important, this cleans up checkpoints saved to DISK
+# save_folder: output_dir/{run_name}/ckpt     # e.g. './{run_name}/ckpt' (local) or 's3://mybucket/mydir/{run_name}/ckpt' (remote)
+
+# (Optional) Load from local filesystem or remote object store to
+# start from an existing model checkpoint;
+# e.g. './ckpt/latest-rank{rank}.pt' (local), or
+# 's3://mybucket/mydir/ckpt/latest-rank{rank}.pt' (remote)
+# load_path: null

@@ -16,12 +16,13 @@ seed: 17
 device_eval_batch_size: 128
 # device_train_microbatch_size: 512
 device_train_microbatch_size: 128
+#device_train_microbatch_size: 256
 precision: amp_bf16
 device: gpu
 dist_timeout: 72000
 
 # Run Name
-run_name: bert_base_uncased_acdcpp_s0.9_w8kf8kc9k
+run_name: bert_base_uncased_acdcpp_vnm_128-2-4_128-2-8_w8kf8kc9k
 
 # Tokenizer
 tokenizer:
@@ -33,7 +34,7 @@ tokenizer:
 model:
   name: hf_bert
   pretrained: false # Train the model from scratch. Set to true to start from the HF off-the-shelf weights.
-  pretrained_model_name_or_path: ${tokenizer_name}
+  pretrained_model_name_or_path: ${model_name_or_path}
   tokenizer_name: ${tokenizer_name}
   # This implementation generally uses the default architecture values for from the Hugging Face BertConfig object
   # These values can be changed here when pretraining from scratch. Note that these should only be used
@@ -90,11 +91,11 @@ optimizer:
 # ACDC++
 acdc:
   params_re: .*bert.encoder.layer.*.(query|key|value|dense).weight
-  sparsity_high: 0.75
-  sparsity_low: 0.5 # skip this line for normal acdc (use dense in the schedule instead)
-  is_global: true
+  sparsity_high: "128:2:8"
+  sparsity_low: "128:2:4"
+  is_global: false
   pruner: magnitude
-  sparsity_structure: unstructured
+  sparsity_structure: vnm
   # reset_optimizer: true
   schedule:
     - type: dense
@@ -111,7 +112,6 @@ acdc:
       reset_optimizer: true # whether to reset optimizer before every period in this item starts
     - type: high
       reset_optimizer: true
-
 
   # warmup: 8000
   # acdc_freq: 8000

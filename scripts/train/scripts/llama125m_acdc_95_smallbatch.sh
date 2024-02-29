@@ -1,0 +1,1 @@
+composer train_acdcpp.py yamls/acdc_levanter/llama125m_acdc_s0.95_smallbatch.yaml

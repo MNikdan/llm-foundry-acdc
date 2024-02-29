@@ -1,1 +1,1 @@
-composer train_acdcpp.py yamls/acdc/bert_base_uncased_acdcpp_vnm_64-2-4_64-2-8_w8kf8kc9k.yaml
+composer train_acdcpp.py yamls/acdc/wikibook_bert_base_uncased_acdcpp_vnm_128-2-4_128-2-16_f1800.yaml
