@@ -1005,10 +1005,7 @@ def main(cfg: DictConfig):
 
 
     print('Saving directly into HF-friendly format')
-    if "WANDB_PROJECT" in os.environ and os.environ["WANDB_DISABLED"] == "False":
-        path_to_save = os.path.join(hf_save_path, os.environ["WANDB_PROJECT"], run_name)
-    else:
-        path_to_save = os.path.join(hf_save_path, run_name)
+    path_to_save = os.path.join(hf_save_path, run_name)
 
     if torch.distributed.get_rank() == 0:
         os.makedirs(path_to_save, exist_ok=True) # <-- override if it exists
