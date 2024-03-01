@@ -7,8 +7,8 @@ tokenizer_name: typeof/tiny-llama-1B
 
 # System
 seed: 0
-device_eval_batch_size: 4
-device_train_microbatch_size: 4
+device_eval_batch_size: 1
+device_train_microbatch_size: 1
 precision: amp_bf16
 device: gpu
 dist_timeout: 72000
