@@ -140,7 +140,7 @@ class ACDC(Algorithm):
         # initialize masks
         self.masks = []
         for param in self.prune_params:
-            self.masks.append(torch.ones_like(param, requires_grad=False))
+            self.masks.append(torch.ones_like(param, requires_grad=False, dtype=torch.bool))
 
         # for logging
         self.num_params = sum([param.numel() for param in model.parameters()])
@@ -166,7 +166,7 @@ class ACDC(Algorithm):
             return
         
         for param, mask in zip(self.prune_params, self.masks, strict=True):
-            param.data *= mask
+            param.data *= mask.to(param.data.dtype)
             # if hasattr(param, 'grad'):
             #     param.grad *= mask
             
@@ -434,7 +434,7 @@ class ACDC(Algorithm):
     def prune(self, sparsity):
         if sparsity is None or sparsity <= 0:
             for mask in self.masks:
-                mask.fill_(1.)
+                mask.fill_(True)
             print('masks were reset to all ones')
             return
 

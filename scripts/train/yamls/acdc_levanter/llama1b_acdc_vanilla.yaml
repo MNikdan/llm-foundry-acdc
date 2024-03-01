@@ -2,7 +2,7 @@ data_local: #TODO
 data_remote: # If blank, files must be present in data_local
 model_name_or_path: typeof/tiny-llama-1B
 
-max_seq_len: 4096
+max_seq_len: 1024
 tokenizer_name: typeof/tiny-llama-1B
 
 # System
@@ -125,6 +125,16 @@ loggers:
   wandb:
     project: acdc-llmfoundry
     entity: mnikdan
+
+# # FSDP
+# fsdp_config:
+#   sharding_strategy: FULL_SHARD
+#   mixed_precision: FULL
+#   activation_checkpointing: true
+#   activation_checkpointing_reentrant: false
+#   activation_cpu_offload: false
+#   limit_all_gathers: true
+#   verbose: false
 
 # # (Optional) Checkpoint to local filesystem or remote object store
 # save_interval: 10000ba
