@@ -52,8 +52,8 @@ def main(
         'data_local': dpath,
         'run_name': run_name,
         'hf_save_path': './checkpoints/',
-        'device_train_microbatch_size': 2,
-        'device_eval_microbatch_size': 2
+        'device_train_microbatch_size': 1,
+        'device_eval_batch_size': 1
     }
 
     print(run_name)
