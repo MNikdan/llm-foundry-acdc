@@ -933,13 +933,13 @@ def main(cfg: DictConfig):
     
     # ===== ELDAR: monkey patch ACDC =====
     try:
-        # 1-GPU case => len(train_loader.dataset) = 364 868 892  [TRUE SIZE ACCORDING TO HF HUB]
-        # 8-GPU case => len(train_loader.dataset) = 45 608 612
-        num_ep = float(max_duration.removesuffix('ep'))
-        # import os
-        # num_gpus = len(os.environ['CUDA_VISIBLE_DEVICES'].split(','))
-        num_steps = int(num_ep * len(train_loader.dataset) / device_train_batch_size)
-        print(f"ELDAR DEBUG, num_steps = {num_steps}")
+        # # 1-GPU case => len(train_loader.dataset) = 364 868 892  [TRUE SIZE ACCORDING TO HF HUB]
+        # # 8-GPU case => len(train_loader.dataset) = 45 608 612
+        # num_ep = float(max_duration.removesuffix('ep'))
+        # # import os
+        # # num_gpus = len(os.environ['CUDA_VISIBLE_DEVICES'].split(','))
+        # num_steps = int(num_ep * len(train_loader.dataset) / device_train_batch_size)
+        # print(f"ELDAR DEBUG, num_steps = {num_steps}")
         algorithms.append(
             ACDC(
                 model=model,
