@@ -169,13 +169,21 @@ class ACDC(Algorithm):
             param.data *= mask.to(param.data.dtype)
             # if hasattr(param, 'grad'):
             #     param.grad *= mask
-            
+    
+    def random_subtensor(self, flat_tensor, ratio):
+        assert len(flat_tensor.shape) == 1, 'Only 1D tensors are supported'
+        if ratio == 1:
+            return flat_tensor
+        num_samples = int(flat_tensor.numel() * ratio)
+        indices = torch.randperm(flat_tensor.numel(), device=flat_tensor.device)[:num_samples]
+        return flat_tensor[indices]
+    
     @torch.no_grad()
-    def prune_magnitude_unstr(self, sparsity):
+    def prune_magnitude_unstr(self, sparsity, thresh_sampling_ratio=0.1):
         assert self.pruner == 'magnitude'
         assert isinstance(sparsity, float) and 0 < sparsity < 1, f'Invalid sparsity {sparsity}'
-
-        scores = [torch.abs(param.data).reshape(-1) for param in self.prune_params]
+        
+        scores = [self.random_subtensor(param.data.flatten().abs(), thresh_sampling_ratio) for param in self.prune_params]
         if self.is_global:
             scores = [torch.cat(scores)]
 
