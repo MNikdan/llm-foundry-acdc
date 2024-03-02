@@ -35,8 +35,7 @@ def main(
     params = {
         'eval_subset_num_batches': int(8 * 100 * (512 / bs)),
         'train_subset_num_batches': int(8 * 1200 * (512 / bs)),
-        # 'max_duration': f'{e}ep',
-        'max_duration': '10ba',
+        'max_duration': f'{e}ep',
         'eval_interval': f'{int(8 * 200 * (512 / bs) * e)}ba', # 6 evals during training
         'global_train_batch_size': bs, # should divide 4 * num_devices
         'acdc.is_global': g,
