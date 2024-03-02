@@ -2,7 +2,7 @@ data_local: #TODO
 data_remote: # If blank, files must be present in data_local
 model_name_or_path: typeof/tiny-llama-1B
 
-max_seq_len: 512
+max_seq_len: 1024
 tokenizer_name: typeof/tiny-llama-1B
 
 # System
