@@ -27,7 +27,7 @@ def main(
     args = [v.split('=')[0].strip('(').strip(')').strip() for v in str(inspect.signature(main)).split(',')]
     ls = locals()
     args_dict = {arg:ls[arg] for arg in args if arg != 'd'}
-    run_name = f'llama_125m-c4-acdc-{"-".join([f"{key}_{value}" for key, value in args_dict.items()])}-{random.randint(10000, 99999)}'
+    run_name = f'new-llama_125m-c4-acdc-{"-".join([f"{key}_{value}" for key, value in args_dict.items()])}-{random.randint(10000, 99999)}'
     
     
     acdc_scale = e if sa else 1

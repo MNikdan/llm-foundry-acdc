@@ -318,7 +318,10 @@ class ACDC(Algorithm):
                 print(f'[ACDC] A mask was generated with sparsity {1 - mask.sum().item() / mask.numel()}.')
 
     @torch.no_grad()
-    def prune_magnitude_cas(self, sparsity, col_transfer_ratio=0.9):
+    def prune_magnitude_cas(self, sparsity, col_transfer_ratio=None):
+        if col_transfer_ratio is None:
+            col_transfer_ratio = sparsity / 2 + 0.5 # 0.7 -> 0.85, 0.5 -> 0.75, 0.3 -> 0.65
+
         # first let's prune the rows
         self.prune_magnitude_str(sparsity, do_log=False)
 
@@ -454,8 +457,12 @@ class ACDC(Algorithm):
             elif self.sparsity_structure == 'vnm':
                 v, n, m = sparsity.split(':')
                 self.prune_magnitude_vnm(int(v), int(n), int(m))
-            elif self.sparsity_structure == 'cas':
-                self.prune_magnitude_cas(sparsity)
+            elif self.sparsity_structure.startswith('cas'):
+                parts = self.sparsity_structure.split(':')
+                col_sp = None
+                if len(parts) > 1 and parts[-1] != 'auto':
+                    col_sp = float(parts[-1])
+                self.prune_magnitude_cas(sparsity, col_transfer_ratio=col_sp)
         else:
             raise NotImplementedError(f"Pruner {self.pruner} not implemented")    
         

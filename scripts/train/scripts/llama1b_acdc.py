@@ -27,8 +27,8 @@ def main(
     
     args = [v.split('=')[0].strip('(').strip(')').strip() for v in str(inspect.signature(main)).split(',')]
     ls = locals()
-    args_dict = {arg:ls[arg] for arg in args if arg != 'd'}
-    run_name = f'llama_1b-c4-acdc-{"-".join([f"{key}_{value}" for key, value in args_dict.items()])}-{random.randint(10000, 99999)}'
+    args_dict = {arg:ls[arg] for arg in args if arg not in ['d', 'dpath']}
+    run_name = f'new-llama_1b-c4-acdc-{"-".join([f"{key}_{value}" for key, value in args_dict.items()])}-{random.randint(10000, 99999)}'
     
     acdc_scale = e if sa else 1
     num_total_steps = int(8 * 1200 * (512 / bs) * e)
@@ -57,7 +57,7 @@ def main(
     print(run_name)
     print(params)
 
-    command = f'WANDB_PROJECT=llama1b-c4-acdc-mosaic CUDA_VISIBLE_DEVICES={",".join(d)} composer train_acdcpp.py yamls/acdc_levanter/llama1b_acdc_{m}.yaml'
+    command = f'CUDA_VISIBLE_DEVICES={",".join(d)} composer train_acdcpp.py yamls/acdc_levanter/llama1b_acdc_{m}.yaml'
     for key, value in params.items():
         command += f' {key}={value}'
     print(command)
