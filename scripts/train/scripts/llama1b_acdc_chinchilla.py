@@ -28,7 +28,7 @@ def main(
     args = [v.split('=')[0].strip('(').strip(')').strip() for v in str(inspect.signature(main)).split(',')]
     ls = locals()
     args_dict = {arg:ls[arg] for arg in args if arg not in ['d', 'dpath']}
-    run_name = f'new-llama_1b-c4-acdc-{"-".join([f"{key}_{value}" for key, value in args_dict.items()])}-{random.randint(10000, 99999)}'
+    run_name = f'chinch-llama_1b-c4-acdc-{"-".join([f"{key}_{value}" for key, value in args_dict.items()])}-{random.randint(10000, 99999)}'
     
     acdc_scale = e if sa else 1
     # 8 for 1B/125M (model size) and 4 for 4096/1024 (seq len)
