@@ -57,7 +57,7 @@ def main(
 
     if dpath.startswith('gs://') or dpath.startswith('http'):
         del params['data_local']
-        param['data_remote'] = dpath
+        params['data_remote'] = dpath
 
     print(run_name)
     print(params)
