@@ -945,7 +945,7 @@ def main(cfg: DictConfig):
         build_algorithm(str(name), algorithm_cfg)
         for name, algorithm_cfg in algorithm_configs.items()
     ] if algorithm_configs else []
-    
+
     # ===== ELDAR: monkey patch ACDC =====
     try:
         # # 1-GPU case => len(train_loader.dataset) = 364 868 892  [TRUE SIZE ACCORDING TO HF HUB]
