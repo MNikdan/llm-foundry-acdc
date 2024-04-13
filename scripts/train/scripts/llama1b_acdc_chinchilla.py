@@ -55,7 +55,7 @@ def main(
         'hf_save_path': './checkpoints/',
     }
 
-    if dpath.startswith('gs://'):
+    if dpath.startswith('gs://') or dpath.startswith('http'):
         del params['data_local']
         param['data_remote'] = dpath
 
