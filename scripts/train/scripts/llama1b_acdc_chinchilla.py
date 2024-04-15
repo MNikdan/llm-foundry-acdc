@@ -20,14 +20,15 @@ def main(
         o='decoupled_adamw', # optim
         lr=0.0001,
         d=None, # devices
-        dpath=None, # data_path
+        ldpath=None, # local data path
+        rdpath=None # remote data path
     ):
     if d is None:
         d = [str(i) for i in range(8)]
     
     args = [v.split('=')[0].strip('(').strip(')').strip() for v in str(inspect.signature(main)).split(',')]
     ls = locals()
-    args_dict = {arg:ls[arg] for arg in args if arg not in ['d', 'dpath']}
+    args_dict = {arg:ls[arg] for arg in args if arg not in ['d', 'ldpath', 'rdpath']}
     run_name = f'chinch-llama_1b-c4-acdc-{"-".join([f"{key}_{value}" for key, value in args_dict.items()])}-{random.randint(10000, 99999)}'
     
     acdc_scale = e if sa else 1
@@ -50,14 +51,13 @@ def main(
         'optimizer.weight_decay': wd,
         'optimizer.name': o,
         'optimizer.lr': lr,
-        'data_local': dpath,
+        'data_local': ldpath,
         'run_name': run_name,
         'hf_save_path': './checkpoints/',
     }
 
-    if dpath.startswith('gs://') or dpath.startswith('http'):
-        del params['data_local']
-        params['data_remote'] = dpath
+    if rdpath is not None:
+        params['data_remote'] = rdpath
 
     print(run_name)
     print(params)
