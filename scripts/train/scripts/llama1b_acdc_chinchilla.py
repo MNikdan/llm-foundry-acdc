@@ -57,6 +57,7 @@ def main(
     }
 
     if rdpath is not None:
+        del params['data_local']
         params['data_remote'] = rdpath
 
     print(run_name)
