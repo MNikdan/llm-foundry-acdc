@@ -20,14 +20,16 @@ def main(
         o='decoupled_adamw', # optim
         lr=0.0006,
         d=None, # devices
+        dpath=None, # local data path
+        rdpath=None # remote data path
     ):
     if d is None:
         d = [str(i) for i in range(8)]
     
     args = [v.split('=')[0].strip('(').strip(')').strip() for v in str(inspect.signature(main)).split(',')]
     ls = locals()
-    args_dict = {arg:ls[arg] for arg in args if arg != 'd'}
-    run_name = f'sweep-llama_125m-c4-acdc-{"-".join([f"{key}_{value}" for key, value in args_dict.items()])}-{random.randint(10000, 99999)}'
+    args_dict = {arg:ls[arg] for arg in args if arg not in ['d', 'dpath', 'rdpath']}
+    run_name = f'iou2-llama_125m-c4-acdc-{"-".join([f"{key}_{value}" for key, value in args_dict.items()])}-{random.randint(10000, 99999)}'
     
     
     acdc_scale = e if sa else 1
@@ -49,8 +51,14 @@ def main(
         'optimizer.weight_decay': wd,
         'optimizer.name': o,
         'optimizer.lr': lr,
-        'run_name': run_name
+        'data_local': dpath,
+        'run_name': run_name,
+        'hf_save_path': './checkpoints/',
     }
+
+    if rdpath is not None:
+        del params['data_local']
+        params['data_remote'] = rdpath
 
     print(run_name)
     print(params)

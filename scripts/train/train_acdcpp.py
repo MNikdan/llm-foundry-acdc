@@ -143,6 +143,8 @@ class ACDC(Algorithm):
             self.masks.append(torch.ones_like(param, requires_grad=False, dtype=torch.bool))
 
         # for logging
+        self.first_masks = None
+        self.prev_masks = None
         self.num_params = sum([param.numel() for param in model.parameters()])
         self.num_prunable = sum([param.numel() for param in self.prune_params])
 
@@ -361,7 +363,15 @@ class ACDC(Algorithm):
                     
                     col_scores = torch.abs(param.data).sum(0)[torch.logical_not(col_mask_and)]
                     num_zeros = int(col_scores.numel() * col_transfer_ratio)
-                    threshold = torch.kthvalue(col_scores, num_zeros)[0]
+                    assert len(col_scores.shape) == 1, f'Only 1D tensors are supported here. But this is not the case for {name} with shape {param.shape}'
+                    try:
+                        threshold = torch.kthvalue(col_scores, num_zeros)[0]
+                    except:
+                        print(col_scores.shape, num_zeros, col_transfer_ratio)
+                        raise ValueError('Error in kthvalue')
+                        # if self.gpu == 0:
+                        #     breakpoint()
+                        # torch.distributed.barrier()
 
                     ptp = 0 # to supprot acdc++, where we decrease sprasity to somewhere more than 0
                     num_eq_thresh = (col_scores == threshold).sum().item()
@@ -436,6 +446,44 @@ class ACDC(Algorithm):
         to_log['acdc/num_prunable'] = self.num_prunable
         return to_log
 
+    def get_iou_logs(self):
+        assert self.prev_masks is not None, 'Previous masks are not available'
+        
+        to_log = {}
+        
+        intersection_sum = 0
+        union_sum = 0
+
+        intersection_sum_with_first = 0
+        union_sum_with_first = 0
+
+        for i in range(len(self.masks)):
+            name = self.prune_params_names[i]
+            prev_mask = self.prev_masks[i]
+            mask = self.masks[i]
+
+            prev_mask_dev = prev_mask.to(mask.device)
+            intersection = torch.logical_and(prev_mask_dev, mask).sum().item()
+            union = torch.logical_or(prev_mask_dev, mask).sum().item()
+            to_log['iou_perlayer/' + name] = intersection / union if union > 0 else 0
+            
+            intersection_sum += intersection
+            union_sum += union
+        
+            if self.first_masks is not None:
+                first_mask_dev = self.first_masks[i].to(mask.device)
+                intersection_with_first = torch.logical_and(first_mask_dev, mask).sum().item()
+                union_with_first = torch.logical_or(first_mask_dev, mask).sum().item()
+
+                intersection_sum_with_first += intersection_with_first
+                union_sum_with_first += union_with_first
+
+        to_log['iou/total'] = intersection_sum / union_sum if union > 0 else 0
+        if self.first_masks is not None:
+            to_log['iou_with_first/total'] = intersection_sum_with_first / union_sum_with_first if union_sum_with_first > 0 else 0
+
+        return to_log
+
     def match(self, event, state):
         # BATCH_START = prune/unprune when needed
         # BATCH_END = apply mask when sparse phase
@@ -444,6 +492,7 @@ class ACDC(Algorithm):
     @torch.no_grad()
     def prune(self, sparsity):
         if sparsity is None or sparsity <= 0:
+            self.prev_masks = [mask.detach().cpu() for mask in self.masks]
             for mask in self.masks:
                 mask.fill_(True)
             print('masks were reset to all ones')
@@ -466,6 +515,11 @@ class ACDC(Algorithm):
         else:
             raise NotImplementedError(f"Pruner {self.pruner} not implemented")    
         
+        if self.first_masks is None:
+            self.first_masks = [mask.detach().cpu() for mask in self.masks]
+
+        if self.gpu == 0 and self.prev_masks is not None:
+            wandb.log(self.get_iou_logs(), commit=False)
 
     @torch.no_grad()
     def apply(self, event, state, logger):
