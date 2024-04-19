@@ -52,15 +52,16 @@ def main(
         'optimizer.weight_decay': wd,
         'optimizer.name': o,
         'optimizer.lr': lr,
-        'data_local': dpath,
         'run_name': run_name,
         'hf_save_path': './checkpoints/',
         'device_train_microbatch_size': pdbs,
         'device_eval_batch_size': pdbs,
     }
 
+    if dpath is not None:
+        params['data_local'] = dpath
+
     if rdpath is not None:
-        del params['data_local']
         params['data_remote'] = rdpath
 
     print(run_name)
