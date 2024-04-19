@@ -20,6 +20,7 @@ def main(
         o='decoupled_adamw', # optim
         lr=0.0006,
         d=None, # devices
+        pdbs=2, # per_device_batch_size
         dpath=None, # local data path
         rdpath=None # remote data path
     ):
@@ -28,7 +29,7 @@ def main(
     
     args = [v.split('=')[0].strip('(').strip(')').strip() for v in str(inspect.signature(main)).split(',')]
     ls = locals()
-    args_dict = {arg:ls[arg] for arg in args if arg not in ['d', 'dpath', 'rdpath']}
+    args_dict = {arg:ls[arg] for arg in args if arg not in ['d', 'dpath', 'rdpath', 'pdbs']}
     run_name = f'iou2-llama_125m-c4-acdc-{"-".join([f"{key}_{value}" for key, value in args_dict.items()])}-{random.randint(10000, 99999)}'
     
     
@@ -54,6 +55,8 @@ def main(
         'data_local': dpath,
         'run_name': run_name,
         'hf_save_path': './checkpoints/',
+        'device_train_microbatch_size': pdbs,
+        'device_eval_batch_size': pdbs,
     }
 
     if rdpath is not None:
