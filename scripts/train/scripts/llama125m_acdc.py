@@ -22,14 +22,15 @@ def main(
         d=None, # devices
         pdbs=2, # per_device_batch_size
         dpath=None, # local data path
-        rdpath=None # remote data path
+        rdpath=None, # remote data path
+        pretrained=None
     ):
     if d is None:
         d = [str(i) for i in range(8)]
     
     args = [v.split('=')[0].strip('(').strip(')').strip() for v in str(inspect.signature(main)).split(',')]
     ls = locals()
-    args_dict = {arg:ls[arg] for arg in args if arg not in ['d', 'dpath', 'rdpath', 'pdbs']}
+    args_dict = {arg:ls[arg] for arg in args if arg not in ['d', 'dpath', 'rdpath', 'pdbs', 'pretrained']}
     run_name = f'chinchilla-sweep-llama_125m-c4-acdc-{"-".join([f"{key}_{value}" for key, value in args_dict.items()])}-{random.randint(10000, 99999)}'
     
     
@@ -63,6 +64,9 @@ def main(
 
     if rdpath is not None:
         params['data_remote'] = rdpath
+    
+    if pretrained is not None:
+        params['model_name_or_path'] = pretrained
 
     print(run_name)
     print(params)
