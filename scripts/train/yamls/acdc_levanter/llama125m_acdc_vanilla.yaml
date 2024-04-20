@@ -1,4 +1,4 @@
-data_local: /mnt/beegfs/alistgrp/mnikdan/cas_c4/llama70b_concat4096
+data_local: /mnt/beegfs/alistgrp/mnikdan/chinch_cas_c4/llama70b_concat4096
 data_remote: # If blank, files must be present in data_local
 model_name_or_path: /mnt/beegfs/alistgrp/mnikdan/llama2-125m-reset
 
@@ -53,6 +53,7 @@ tokenizer:
   name: ${tokenizer_name}
   kwargs:
     model_max_length: ${max_seq_len}
+    # use_auth_token: true
 
 # Model
 model:

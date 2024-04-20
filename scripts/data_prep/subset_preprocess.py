@@ -53,11 +53,11 @@ def create_sub_dataset_local(full_data_json, subset_size, seq_len, shuffle=True,
     return dataset_path
 
 
-seq_len = 2048
+seq_len = 4096
 model_size = 125 # million parameters
 
 num_tokens_needed = int(model_size / 125) * 2500000000
-num_samples_needed = num_tokens_needed // 1024 # assuming samples are 1024 tokens long on average
+num_samples_needed = num_tokens_needed // 256 # assuming samples are 256 tokens long on average
 print(f'num_tokens_needed: {num_tokens_needed}')
 print(f'num_samples_needed: {num_samples_needed}')
 
@@ -67,7 +67,7 @@ create_sub_dataset_local(
     subset_size=num_samples_needed,
     seq_len=seq_len,
     return_json=False,
-    dataset_path=f'/mnt/beegfs/alistgrp/mnikdan/cas_c4/llama70b_concat{seq_len}/'
+    dataset_path=f'/mnt/beegfs/alistgrp/mnikdan/chinch_cas_c4/llama70b_concat{seq_len}/'
 )
 
 # print(dataset_path)
