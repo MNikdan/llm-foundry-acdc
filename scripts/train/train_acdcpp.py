@@ -475,6 +475,8 @@ class ACDC(Algorithm):
                 intersection_with_first = torch.logical_and(first_mask_dev, mask).sum().item()
                 union_with_first = torch.logical_or(first_mask_dev, mask).sum().item()
 
+                to_log['iou_with_first_perlayer/' + name] = intersection_with_first / union_with_first if union_with_first > 0 else 0
+
                 intersection_sum_with_first += intersection_with_first
                 union_sum_with_first += union_with_first
 
