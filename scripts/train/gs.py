@@ -11,7 +11,6 @@ def download_directory(bucket_name, prefix):
     dir_name = prefix.split("/")[-1]
     print(f"dir_name: {dir_name}")
     for blob in blobs:
-        breakpoint()
         blob_name = blob.name.replace(prefix + '/', dir_name + '/')
         print(blob.name, blob_name)
         if blob_name.endswith("/"):
