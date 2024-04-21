@@ -28,6 +28,7 @@ acdc_schedule_1_freq: #TODO
 acdc_schedule_1_end: #TODO
 acdc_schedule_2_end: #TODO
 acdc_final_sparsity: #TODO
+acdc_reset_optim: false
 
 acdc:
   params_re: .*.(q_proj|k_proj|v_proj|o_proj|up_proj|down_proj|gate_proj).weight
@@ -41,12 +42,12 @@ acdc:
     - sparsity: 0/${acdc_final_sparsity}
       freq: ${acdc_schedule_1_freq}
       end: ${acdc_schedule_1_end}
-      reset_optimizer: false # whether to reset optimizer before every period in this item starts
+      reset_optimizer: ${acdc_reset_optim} # whether to reset optimizer before every period in this item starts
     - sparsity: 0
       end: ${acdc_schedule_2_end}
-      reset_optimizer: false
+      reset_optimizer: ${acdc_reset_optim}
     - sparsity: ${acdc_final_sparsity}
-      reset_optimizer: false
+      reset_optimizer: ${acdc_reset_optim}
 
 # Tokenizer
 tokenizer:

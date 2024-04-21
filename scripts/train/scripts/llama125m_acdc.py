@@ -38,9 +38,9 @@ def main(
     num_total_steps = int(1200 * (512 / bs) * e)
     params = {
         'eval_subset_num_batches': int(100 * (512 / bs)),
-        'train_subset_num_batches': int(1200 * (512 / bs)),
-        'max_duration': f'{e}ep',
-        'eval_interval': f'{int(200 * (512 / bs) * e)}ba', # 6 evals during training
+        'train_subset_num_batches': int(1200 * (512 / bs) * e),
+        'max_duration': f'1ep',
+        'eval_interval': f'{int(200 * (512 / bs))}ba', # 6 evals during training
         'global_train_batch_size': bs, # should divide 4 * num_devices
         'acdc.is_global': g,
         'acdc.pruner': p,
