@@ -18,6 +18,7 @@ def main(
         p='magnitude', # pruner
         wd=0, # weight_decay
         o='decoupled_adamw', # optim
+        ro=False, # reset optim state after each phase
         lr=0.0006,
         d=None, # devices
         pdbs=2, # per_device_batch_size
@@ -57,6 +58,7 @@ def main(
         'hf_save_path': './checkpoints/',
         'device_train_microbatch_size': pdbs,
         'device_eval_batch_size': pdbs,
+        'acdc_reset_optim': ro
     }
 
     if dpath is not None:

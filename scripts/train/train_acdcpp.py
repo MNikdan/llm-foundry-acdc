@@ -37,6 +37,9 @@ import re
 import torch
 import wandb
 
+import streaming
+streaming.base.util.clean_stale_shared_memory()
+
 class ACDC(Algorithm):
     @torch.no_grad()
     def __init__(self, model, params_re: str, sparsity_structure: str, is_global: bool, schedule: List[dict], pruner: str):        
@@ -118,7 +121,7 @@ class ACDC(Algorithm):
             current_step = item['end']
             
         
-        # print(f'[ACDC] Schedule: {clean_schedule}')
+        print(f'[ACDC] Schedule: {clean_schedule}')
         return clean_schedule
 
     def _get_current_agenda(self):
