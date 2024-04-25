@@ -5,7 +5,7 @@ import os
 
 def main(
         s=0.95, # sparsity
-        m='vanilla', # method: vanilla or gradual
+        m='vanilla', # method: vanilla or gradual, or nodense
         g=True, # global
         st='unstr', # structure
         bs=64, # batch_size
